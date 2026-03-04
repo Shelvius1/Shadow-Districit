@@ -2,21 +2,23 @@ using UnityEngine;
 
 public class CameraFollow : MonoBehaviour
 {
-    public Transform player;      // a Player objektum
-    public Vector3 offset;        // távolság a Player-től
-    public float smoothSpeed = 0.125f; // simítás a mozgásnál
+    public Transform target;        // A Player (karakter) Transformja
+    public Vector3 offset = new Vector3(0f, 3f, -5f); // Távolság a karaktertől (fent és hátul)
+    public float smoothSpeed = 10f; // Követési finomság
 
-    void LateUpdate()
+    void LateUpdate() // A kamera mozgását mindig LateUpdate-be tesszük!
     {
-        if(player == null) return;
+        if (target == null) return;
 
-        // célpozíció a Player + offset
-        Vector3 desiredPosition = player.position + offset;
-        // simított mozgatás
-        Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
+        // Kiszámoljuk, hová akarunk menni
+        Vector3 desiredPosition = target.position + offset;
+        
+        // Finoman átúsztatjuk a kamerát a jelenlegi helyéről a célhelyre
+        Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed * Time.deltaTime);
+        
         transform.position = smoothedPosition;
 
-        // kamera nézzen a Player-re
-        transform.LookAt(player);
+        // Mindig nézzen a karakterre
+        transform.LookAt(target.position + Vector3.up * 1.5f);
     }
 }
