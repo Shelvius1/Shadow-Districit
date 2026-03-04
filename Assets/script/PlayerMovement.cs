@@ -2,7 +2,9 @@ using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
-    public float speed = 5f;
+    [Header("Mozgási Beállítások")]
+    public float walkSpeed = 2.5f;   // W - Séta sebessége
+    public float runSpeed = 6f;      // Shift + W - Futás sebessége
     public float jumpForce = 5f;
     public float rotationSpeed = 10f;
 
@@ -15,58 +17,90 @@ public class PlayerMovement : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         animator = GetComponentInChildren<Animator>();
         
-        // Kódból is fixáljuk a forgást, de az Inspectorban lévő Constraints a legfontosabb!
-        rb.freezeRotation = true;
+        // Megakadályozzuk, hogy a fizika felborítsa a karaktert
+        if (rb != null)
+            rb.freezeRotation = true;
     }
 
     void Update()
     {
+        // 1. Bemenet lekérése
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
 
-        // Mozgási irány kiszámítása
-        Vector3 movement = new Vector3(moveX, 0f, moveZ).normalized;
+        // Irány és mozgás erőssége
+        Vector3 movement = new Vector3(moveX, 0f, moveZ);
+        float inputMagnitude = movement.magnitude;
 
-        // --- TALAJ ELLENŐRZÉS (Raycast) ---
-        // Egy 1.1 egység hosszú láthatatlan sugarat lövünk lefelé a karakter közepéből. 
-        // A "rb.linearVelocity.y <= 0.1f" feltétel biztosítja, hogy ugrás (felfelé haladás) közben 
-        // azonnal hamis legyen a földet érés, így nincs dupla ugrás.
+        // 2. SHIFT ELLENŐRZÉS (Séta vagy Futás)
+        bool isRunning = Input.GetKey(KeyCode.LeftShift) && inputMagnitude > 0.1f;
+
+        float currentSpeed = 0f;
+        float animatorSpeedValue = 0f;
+
+      if (inputMagnitude > 0.1f)
+{
+    if (Input.GetKey(KeyCode.LeftShift)) // Ha nyomod a Shiftet
+    {
+        currentSpeed = runSpeed;     // Pl. 6
+        animatorSpeedValue = 1.0f;   // Ez a Blend Tree-ben a FUTÁS
+    }
+    else // Ha CSAK a W-t (vagy más irányt) nyomsz
+    {
+        currentSpeed = walkSpeed;    // Pl. 2.5
+        animatorSpeedValue = 0.5f;   // Ez a Blend Tree-ben a SÉTA
+    }
+}
+else
+{
+    currentSpeed = 0f;
+    animatorSpeedValue = 0f;         // Állás
+}
+
+animator.SetFloat("Speed", animatorSpeedValue);
+      
+
+        // Érték átadása az Animator "Speed" paraméterének
+        if (animator != null)
+        {
+            animator.SetFloat("Speed", animatorSpeedValue);
+        }
+
+        // 3. TALAJ ELLENŐRZÉS
+        // A biztonság kedvéért rb.velocity-t használunk linearVelocity helyett
         isGrounded = Physics.Raycast(transform.position, Vector3.down, 1.1f) && rb.linearVelocity.y <= 0.1f;
 
-        if (movement.magnitude >= 0.1f)
+        // 4. MOZGÁS ÉS FORGÁS
+        if (inputMagnitude >= 0.1f)
         {
-            // Forgatás a mozgás irányába
-            Quaternion targetRotation = Quaternion.LookRotation(movement);
+            Vector3 moveDir = movement.normalized;
+            
+            // Forgatás
+            Quaternion targetRotation = Quaternion.LookRotation(moveDir);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
 
-            // TÉNYLEGES HALADÁS
-            rb.linearVelocity = new Vector3(movement.x * speed, rb.linearVelocity.y, movement.z * speed);
+            // Haladás (velocity-t használunk a kompatibilitás miatt)
+            rb.linearVelocity = new Vector3(moveDir.x * currentSpeed, rb.linearVelocity.y, moveDir.z * currentSpeed);
         }
         else
         {
-            // Megálláskor ne csússzon tovább
+            // Megállás, de megőrizzük a zuhanási sebességet
             rb.linearVelocity = new Vector3(0f, rb.linearVelocity.y, 0f);
         }
 
-        // Animációk
-        float moveAmount = movement.magnitude;
-        animator.SetFloat("walking", moveAmount * 0.5f);
-        animator.SetFloat("run", moveAmount);
-
-        // Ugrás
+        // 5. UGRÁS
         if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
         {
-            // Nullázzuk a függőleges sebességet ugrás előtt, hogy mindig egyforma magasra ugorjon
             rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             
-            animator.SetBool("jump", true);
+            if (animator != null)
+                animator.SetBool("jump", true);
         }
-        
-        // Ha újra stabilan a földön vagyunk, kapcsoljuk ki az ugrás animációt
-        if (isGrounded)
+        else if (isGrounded)
         {
-            animator.SetBool("jump", false);
+            if (animator != null)
+                animator.SetBool("jump", false);
         }
     }
 }
