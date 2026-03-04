@@ -6,16 +6,15 @@ public class PlayerMovement : MonoBehaviour
     public float walkSpeed = 2.5f;   
     public float runSpeed = 6f;      
     public float jumpForce = 5f;
-    public float rotationSpeed = 10f;
+    public float rotationSpeed = 450f; // Megemeltük, mert fokban számolunk!
 
     [Header("Finomítások")]
-    public float speedSmoothness = 10f; // Mennyire "csússzon" a megállás/indulás (kisebb szám = lassabb megállás)
+    public float speedSmoothness = 10f; 
 
     private Rigidbody rb;
     private Animator animator;
     private bool isGrounded;
 
-    // Ezeket osztályszintre emeltük, hogy a program "emlékezzen" rájuk!
     private float currentSpeed;
     private float animatorSpeedValue;
 
@@ -31,39 +30,22 @@ public class PlayerMovement : MonoBehaviour
     void Update()
     {
         // 1. Bemenet lekérése
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
+        float moveInput = Input.GetAxis("Vertical");   // W/S - Előre/Hátra
+        float turnInput = Input.GetAxisRaw("Horizontal"); // A/D - Azonnali forgás
 
-        Vector3 movement = new Vector3(moveX, 0f, moveZ);
-        float inputMagnitude = movement.magnitude;
-
-        // 2. SHIFT ELLENŐRZÉS
-        bool isRunning = Input.GetKey(KeyCode.LeftShift) && inputMagnitude > 0.1f;
+        // 2. SHIFT ELLENŐRZÉS (Csak ha előre megyünk)
+        bool isRunning = Input.GetKey(KeyCode.LeftShift) && moveInput > 0.1f;
 
         // 3. CÉL SEBESSÉGEK MEGHATÁROZÁSA
-        float targetSpeed = 0f;
-        float targetAnimatorValue = 0f;
+        float targetSpeed = moveInput * (isRunning ? runSpeed : walkSpeed);
+        
+        // Az animációnak az abszolút értéket adjuk át (hátrafelé is sétáljon)
+        float targetAnimatorValue = Mathf.Abs(moveInput) * (isRunning ? 1f : 0.5f);
 
-        if (inputMagnitude > 0.1f)
-        {
-            if (isRunning)
-            {
-                targetSpeed = runSpeed;
-                targetAnimatorValue = 1f;  
-            }
-            else
-            {
-                targetSpeed = walkSpeed;
-                targetAnimatorValue = 0.5f; 
-            }
-        }
-
-        // --- A VARÁZSLAT ITT TÖRTÉNIK (LERP) ---
-        // A jelenlegi sebesség fokozatosan "csúszik" a cél sebesség felé
+        // --- SIMÍTÁS ---
         currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, Time.deltaTime * speedSmoothness);
         animatorSpeedValue = Mathf.Lerp(animatorSpeedValue, targetAnimatorValue, Time.deltaTime * speedSmoothness);
 
-        // Érték átadása az Animatornak
         if (animator != null)
         {
             animator.SetFloat("Speed", animatorSpeedValue);
@@ -71,32 +53,18 @@ public class PlayerMovement : MonoBehaviour
 
         // 4. TALAJ ELLENŐRZÉS
         Vector3 rayStart = transform.position + new Vector3(0f, 0.5f, 0f);
+        isGrounded = Physics.Raycast(rayStart, Vector3.down, 0.6f);
+        Debug.DrawRay(rayStart, Vector3.down * 0.6f, isGrounded ? Color.green : Color.red);
 
-// 2. Kilövünk egy sugarat lefelé 0.6f hosszan. Így pontosan 0.1 méterrel a cipőtalp alá is leér!
-isGrounded = Physics.Raycast(rayStart, Vector3.down, 0.6f);
+        // 5. FORGÁS (A/D gombokra a karakter elfordul)
+        // Használj nagy értéket az Inspectorban (pl. 700-1000)
+transform.Rotate(Vector3.up * turnInput * rotationSpeed * Time.deltaTime, Space.Self);
+        // 6. MOZGÁS (Mindig a saját előre-irányába megy)
+        // Unity 6-ban a linearVelocity-t használjuk
+        Vector3 velocity = transform.forward * currentSpeed;
+        rb.linearVelocity = new Vector3(velocity.x, rb.linearVelocity.y, velocity.z);
 
-// 3. Rajzolunk egy tesztvonalat a Scene ablakba
-Debug.DrawRay(rayStart, Vector3.down * 0.6f, isGrounded ? Color.green : Color.red);
-        // 5. MOZGÁS ÉS FORGÁS
-        if (inputMagnitude >= 0.1f)
-        {
-            Vector3 moveDir = movement.normalized;
-            
-            // Forgatás
-            Quaternion targetRotation = Quaternion.LookRotation(moveDir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-
-            // Haladás az "elsimított" sebességgel
-            rb.linearVelocity = new Vector3(moveDir.x * currentSpeed, rb.linearVelocity.y, moveDir.z * currentSpeed);
-        }
-        else
-        {
-            // Ha elengedjük a gombot, még mindig a "currentSpeed" mozgatja picit előre a lassulás alatt!
-            // Így a fizika és az animáció EGYÜTT lassul le, nem csúszik a lába!
-            rb.linearVelocity = new Vector3(transform.forward.x * currentSpeed, rb.linearVelocity.y, transform.forward.z * currentSpeed);
-        }
-
-        // 6. UGRÁS
+        // 7. UGRÁS
         if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
         {
             rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
@@ -110,7 +78,5 @@ Debug.DrawRay(rayStart, Vector3.down * 0.6f, isGrounded ? Color.green : Color.re
             if (animator != null)
                 animator.SetBool("jump", false);
         }
-
-       
     }
 }
